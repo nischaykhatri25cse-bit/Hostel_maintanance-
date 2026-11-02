@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FixMyRoom — Hostel Maintenance & Complaint Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Top Header -->
+    <header>
+      <div class="brand-wrapper">
+        <div class="brand-icon">🔧</div>
+        <div class="brand-title">
+          <h1>FixMyRoom</h1>
+          <p>Hostel Maintenance & Complaint Tracker Dashboard</p>
+        </div>
+      </div>
+      <div>
+        <span class="badge-live" id="apiStatusBadge">
+          <span class="pulse-dot"></span> System Online
+        </span>
+      </div>
+    </header>
+
+    <!-- Feedback Banner for Live Alerts -->
+    <div id="alertBanner" role="alert"></div>
+
+    <!-- Summary Statistics Cards -->
+    <section class="stats-grid">
+      <div class="stat-card total">
+        <div class="stat-info">
+          <span>Total Complaints</span>
+          <h2 id="totalCount">0</h2>
+        </div>
+        <div class="stat-icon">📋</div>
+      </div>
+
+      <div class="stat-card pending">
+        <div class="stat-info">
+          <span>Pending Issues</span>
+          <h2 id="pendingCount">0</h2>
+        </div>
+        <div class="stat-icon">⏳</div>
+      </div>
+
+      <div class="stat-card resolved">
+        <div class="stat-info">
+          <span>Resolved Issues</span>
+          <h2 id="resolvedCount">0</h2>
+        </div>
+        <div class="stat-icon">✅</div>
+      </div>
+    </section>
+
+    <!-- Main Two-Column Layout: Form on Left, Table on Right -->
+    <main class="main-layout">
+      <!-- Left Column: Lodge Complaint Form -->
+      <section class="card">
+        <div class="card-header">
+          <h3><span>➕</span> Lodge New Complaint</h3>
+        </div>
+        <div class="card-body">
+          <form id="complaintForm">
+            <!-- Student Name -->
+            <div class="form-group">
+              <label for="studentName">Student Name <span class="required">*</span></label>
+              <input 
+                type="text" 
+                id="studentName" 
+                name="studentName" 
+                class="form-control" 
+                placeholder="e.g. Rahul Sharma" 
+                required 
+              />
+            </div>
+
+            <!-- Room Number -->
+            <div class="form-group">
+              <label for="roomNumber">Room Number <span class="required">*</span></label>
+              <input 
+                type="text" 
+                id="roomNumber" 
+                name="roomNumber" 
+                class="form-control" 
+                placeholder="e.g. B-204" 
+                required 
+              />
+            </div>
+
+            <!-- Category Dropdown -->
+            <div class="form-group">
+              <label for="category">Category <span class="required">*</span></label>
+              <select id="category" name="category" class="form-control" required>
+                <option value="" disabled selected>Select complaint category</option>
+                <option value="Wi-Fi">Wi-Fi / Internet</option>
+                <option value="Electrical">Electrical (Fan, Light, Switch)</option>
+                <option value="Plumbing">Plumbing (Tap, Leakage, Flush)</option>
+                <option value="Furniture">Furniture (Bed, Chair, Table, Cupboard)</option>
+              </select>
+            </div>
+
+            <!-- Description -->
+            <div class="form-group">
+              <label for="description">Complaint Description <span class="required">*</span></label>
+              <textarea 
+                id="description" 
+                name="description" 
+                class="form-control" 
+                rows="3" 
+                placeholder="e.g. Ceiling fan regulator not working and sparks when turned on" 
+                required
+              ></textarea>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" id="submitBtn" class="btn btn-primary">
+              🚀 Submit Complaint
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Right Column: Complaints List Table -->
+      <section class="card">
+        <div class="card-header">
+          <h3><span>📝</span> All Hostel Complaints</h3>
+          <button class="btn btn-sm" onclick="loadComplaints()" title="Refresh List" style="border: 1px solid var(--border-color); background: white;">
+            🔄 Refresh
+          </button>
+        </div>
+        <div class="card-body" style="padding: 0;">
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Student Name</th>
+                  <th>Room</th>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="complaintsTableBody">
+                <!-- Dynamically populated via fetchComplaints() -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Empty State Container -->
+          <div id="emptyState" class="empty-state" style="display: none;">
+            <div class="empty-icon">🎉</div>
+            <p><strong>No complaints logged yet!</strong></p>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+              Use the form on the left to submit a maintenance request.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+      <p><strong>FixMyRoom</strong> &bull; University Evaluation Project &bull; Built with Node.js, Express, MongoDB Atlas &amp; Vanilla HTML/CSS</p>
+    </footer>
+  </div>
+
+  <!-- Minimal Inline Vanilla JavaScript to connect HTML to Express REST APIs -->
+  <script>
+    // Base API URL for complaints
+    const API_BASE = '/api/complaints';
+
+    // DOM Elements
+    const complaintForm = document.getElementById('complaintForm');
+    const complaintsTableBody = document.getElementById('complaintsTableBody');
+    const emptyState = document.getElementById('emptyState');
+    const totalCountEl = document.getElementById('totalCount');
+    const pendingCountEl = document.getElementById('pendingCount');
+    const resolvedCountEl = document.getElementById('resolvedCount');
+    const alertBanner = document.getElementById('alertBanner');
+
+    // Utility: Show temporary message banner
+    function showAlert(message, type = 'success') {
+      alertBanner.className = type === 'success' ? 'alert-success' : 'alert-danger';
+      alertBanner.textContent = message;
+      alertBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      setTimeout(() => {
+        alertBanner.className = '';
+        alertBanner.textContent = '';
+      }, 4000);
+    }
+
+    // Utility: Map category to CSS class
+    function getCategoryBadgeClass(category) {
+      switch (category) {
+        case 'Wi-Fi': return 'badge-cat-wifi';
+        case 'Electrical': return 'badge-cat-elec';
+        case 'Plumbing': return 'badge-cat-plumb';
+        case 'Furniture': return 'badge-cat-furn';
+        default: return 'badge-cat';
+      }
+    }
+
+    // 1. READ ALL: Fetch complaints from GET /api/complaints
+    async function loadComplaints() {
+      try {
+        const response = await fetch(API_BASE);
+        if (!response.ok) {
+          throw new Error('Failed to load complaints from server');
+        }
+        const complaints = await response.json();
+
+        // Update Statistics Cards
+        const total = complaints.length;
+        const pending = complaints.filter(c => c.status === 'Pending').length;
+        const resolved = complaints.filter(c => c.status === 'Resolved').length;
+
+        totalCountEl.textContent = total;
+        pendingCountEl.textContent = pending;
+        resolvedCountEl.textContent = resolved;
+
+        // Render Table Rows
+        complaintsTableBody.innerHTML = '';
+
+        if (complaints.length === 0) {
+          emptyState.style.display = 'block';
+          return;
+        } else {
+          emptyState.style.display = 'none';
+        }
+
+        complaints.forEach(item => {
+          const row = document.createElement('tr');
+          const isResolved = item.status === 'Resolved';
+          const formattedDate = item.createdAt 
+            ? new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : 'Just now';
+
+          row.innerHTML = `
+            <td><strong>${escapeHtml(item.studentName)}</strong></td>
+            <td><code>${escapeHtml(item.roomNumber)}</code></td>
+            <td><span class="badge ${getCategoryBadgeClass(item.category)}">${escapeHtml(item.category)}</span></td>
+            <td style="max-width: 260px; word-break: break-word;">${escapeHtml(item.description)}</td>
+            <td>
+              <span class="badge ${isResolved ? 'badge-resolved' : 'badge-pending'}">
+                ${isResolved ? '✅ Resolved' : '⏳ Pending'}
+              </span>
+            </td>
+            <td style="font-size: 0.8rem; color: var(--text-muted);">${formattedDate}</td>
+            <td>
+              <div class="action-buttons">
+                <button 
+                  class="btn btn-sm btn-toggle" 
+                  onclick="toggleStatus('${item._id}', '${item.status}')"
+                  title="Click to toggle status"
+                >
+                  ${isResolved ? '↩ Mark Pending' : '✓ Mark Resolved'}
+                </button>
+                <button 
+                  class="btn btn-sm btn-delete" 
+                  onclick="deleteComplaint('${item._id}')"
+                  title="Delete complaint"
+                >
+                  🗑
+                </button>
+              </div>
+            </td>
+          `;
+          complaintsTableBody.appendChild(row);
+        });
+      } catch (err) {
+        console.error('Error fetching complaints:', err);
+        showAlert('Could not connect to API. Please make sure server and MongoDB are running.', 'danger');
+      }
+    }
+
+    // 2. CREATE: Submit new complaint via POST /api/complaints
+    complaintForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const payload = {
+        studentName: document.getElementById('studentName').value.trim(),
+        roomNumber: document.getElementById('roomNumber').value.trim(),
+        category: document.getElementById('category').value,
+        description: document.getElementById('description').value.trim(),
+        status: 'Pending'
+      };
+
+      try {
+        const response = await fetch(API_BASE, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showAlert('Complaint submitted successfully!');
+          complaintForm.reset();
+          loadComplaints();
+        } else {
+          showAlert(data.message || data.error || 'Failed to submit complaint', 'danger');
+        }
+      } catch (err) {
+        console.error('Error creating complaint:', err);
+        showAlert('Server connection error. Please try again.', 'danger');
+      }
+    });
+
+    // 3. UPDATE: Toggle status between 'Pending' and 'Resolved' via PUT /api/complaints/:id
+    async function toggleStatus(id, currentStatus) {
+      const nextStatus = currentStatus === 'Pending' ? 'Resolved' : 'Pending';
+
+      try {
+        const response = await fetch(`${API_BASE}/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: nextStatus })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showAlert(`Status updated to "${nextStatus}"!`);
+          loadComplaints();
+        } else {
+          showAlert(data.message || 'Failed to update status', 'danger');
+        }
+      } catch (err) {
+        console.error('Error updating status:', err);
+        showAlert('Error updating complaint status', 'danger');
+      }
+    }
+
+    // 4. DELETE: Remove complaint via DELETE /api/complaints/:id
+    async function deleteComplaint(id) {
+      if (!confirm('Are you sure you want to permanently delete this complaint record?')) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/${id}`, {
+          method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showAlert('Complaint deleted successfully!');
+          loadComplaints();
+        } else {
+          showAlert(data.message || 'Failed to delete complaint', 'danger');
+        }
+      } catch (err) {
+        console.error('Error deleting complaint:', err);
+        showAlert('Error deleting complaint', 'danger');
+      }
+    }
+
+    // Helper to sanitize HTML strings to prevent XSS
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // Initial data load on page load
+    document.addEventListener('DOMContentLoaded', loadComplaints);
+  </script>
+</body>
+</html>
